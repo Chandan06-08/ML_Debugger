@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI ML Debugger</title>
+
+    <style>
+        body {
+            font-family: "Segoe UI", sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        }
+
+        header {
+            text-align: center;
+            padding: 25px;
+            color: white;
+            font-size: 26px;
+            font-weight: bold;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .result {
+            margin-top: 15px;
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            line-height: 1.6;
+            white-space: normal;
+            font-size: 14px;
+        }
+
+        .badge {
+            color: red;
+            font-weight: bold;
+        }
+
+        .loader {
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>🚀 AI ML Debugger</header>
+
+<div class="container">
+
+    <!-- TRAIN -->
+    <div class="card">
+        <h3>Upload Dataset + Select Model</h3>
+
+        <input type="file" id="file">
+
+        <select id="model">
+            <option value="logistic">Logistic Regression</option>
+            <option value="tree">Decision Tree</option>
+            <option value="svm">SVM</option>
+        </select>
+
+        <button onclick="run()">Train & Analyze</button>
+
+        <div class="loader" id="loader">⏳ Training...</div>
+
+        <div id="output" class="result"></div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="card">
+        <h3>Ask Questions</h3>
+
+        <textarea id="question" placeholder="Why is my model overfitting?"></textarea>
+
+        <button onclick="ask()">Ask</button>
+
+        <div class="loader" id="chatLoader">⏳ Thinking...</div>
+
+        <div id="chatOutput" class="result"></div>
+    </div>
+
+</div>
+
+<script>
+
+// FORMAT FUNCTION (VERY IMPORTANT)
+function formatText(text) {
+    return text
+        .replace(/\n/g, "<br>")
+        .replace(/\*\*/g, "")
+        .replace(/- /g, "<br>• ");
+}
+
+
+// TRAIN
+async function run() {
+    const fileInput = document.getElementById("file");
+    const model = document.getElementById("model").value;
+
+    if (fileInput.files.length === 0) {
+        alert("Upload CSV first");
+        return;
+    }
+
+    document.getElementById("loader").style.display = "block";
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    formData.append("model", model);
+
+    const res = await fetch("http://127.0.0.1:8000/train-debug", {
+        method: "POST",
+        body: formData
+    });
+
+    const data = await res.json();
+
+    document.getElementById("loader").style.display = "none";
+
+    document.getElementById("output").innerHTML = `
+        <b>Model:</b> ${data.model} <br>
+
+        <b>Issues:</b> <span class="badge">${data.issues.join(", ")}</span><br><br>
+
+        <b>Train Accuracy:</b> ${data.analysis.train_acc}<br>
+        <b>Validation Accuracy:</b> ${data.analysis.val_acc}<br>
+        <b>Gap:</b> ${data.analysis.gap.toFixed(2)}<br><br>
+
+        <b>Explanation:</b><br>
+        <div>${formatText(data.explanation)}</div>
+    `;
+}
+
+
+// CHAT
+async function ask() {
+    const question = document.getElementById("question").value;
+
+    document.getElementById("chatLoader").style.display = "block";
+
+    const res = await fetch("http://127.0.0.1:8000/ask", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ question })
+    });
+
+    const data = await res.json();
+
+    document.getElementById("chatLoader").style.display = "none";
+
+    document.getElementById("chatOutput").innerHTML = `
+        <b>Answer:</b><br>
+        <div>${formatText(data.answer)}</div>
+    `;
+}
+
+</script>
+
+</body>
+</html>
