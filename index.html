@@ -157,6 +157,9 @@ async function run() {
         <b>Validation Accuracy:</b> ${data.analysis.val_acc}<br>
         <b>Gap:</b> ${data.analysis.gap.toFixed(2)}<br><br>
 
+        <b>Suggested Fixes:</b><br>
+        <div style="color: green; font-weight: bold;">${formatText(data.fixes.join("\n"))}</div><br>
+
         <b>Explanation:</b><br>
         <div>${formatText(data.explanation)}</div>
     `;

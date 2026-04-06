@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import uvicorn
 import os
 import shutil
 import json
@@ -18,9 +19,15 @@ from app.core.profiler import profile_data
 from app.core.analyzer import analyze_training
 from app.core.detector import detect_issues
 
-# LLM
-from app.llm.prompts import build_prompt
-from app.llm.llm_client import call_llm
+# AI Logic (Top-level)
+from ai_logic import build_prompt, call_llm, retrieve_context, generate_fixes, ask_question
+
+# Store the context of the latest training run for the /ask endpoint
+LATEST_RUN = {
+    "profile": None,
+    "analysis": None,
+    "issues": None
+}
 
 app = FastAPI()
 
@@ -33,10 +40,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------ ROOT ------------------
-@app.get("/")
+from fastapi.responses import HTMLResponse
+import os
+
+# ------------------ ROOT (Serve UI) ------------------
+@app.get("/", response_class=HTMLResponse)
 def home():
-    return {"message": "AI ML Debugger Running"}
+    file_path = os.path.join(os.path.dirname(__file__), "index.html")
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+# ------------------ FAVICON (Stop 404 Logs) ------------------
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 
 # ------------------ TRAIN + DEBUG ------------------
@@ -102,14 +120,24 @@ def train_debug(file: UploadFile = File(...), model: str = Form(...)):
     analysis = analyze_training("data/temp_logs.json")
     issues = detect_issues(profile, analysis)
 
-    # LLM explanation
-    prompt = build_prompt(profile, analysis, issues)
+    # LLM explanation + RAG context
+    rag_context = retrieve_context(issues)
+    prompt = f"{build_prompt(profile, analysis, issues)}\n\n--- ADDITIONAL KNOWLEDGE ---\n{rag_context}"
     explanation = call_llm(prompt)
+
+    # AUTO FIXES
+    recommended_fixes = generate_fixes(issues)
+
+    # Update latest run context
+    LATEST_RUN["profile"] = profile
+    LATEST_RUN["analysis"] = analysis
+    LATEST_RUN["issues"] = issues
 
     return {
         "model": model,
         "analysis": analysis,
         "issues": issues,
+        "fixes": recommended_fixes,
         "explanation": explanation
     }
 
@@ -121,7 +149,16 @@ class Query(BaseModel):
 
 @app.post("/ask")
 def ask(query: Query):
-    answer = call_llm(query.question)
+    # Use the context of the LATEST training run
+    answer = ask_question(
+        query.question, 
+        profile=LATEST_RUN["profile"], 
+        analysis=LATEST_RUN["analysis"], 
+        issues=LATEST_RUN["issues"]
+    )
     return {
         "answer": answer
     }
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
